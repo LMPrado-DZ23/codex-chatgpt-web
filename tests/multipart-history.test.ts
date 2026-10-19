@@ -3,10 +3,10 @@ import { chromium } from "playwright-core";
 import { ChatGptBrowserWorker } from "../src/adapters/chatgpt-web/browser-worker";
 import { formatChatGptWebMultipartStage } from "../src/adapters/chatgpt-web/prompt";
 
-const escape = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const group = (key: string, text: string | undefined, answer: string, complete = true) =>
-  `<div data-turn-key="${key}">${text === undefined ? "" : `<div data-user-message-bubble><div data-search-result-target style="white-space:pre-wrap">${escape(text)}</div></div>`}
-    <div data-content-search-unit-key="${key}:assistant"><div data-conversation-role="assistant"></div><div data-markdown-text-style="assistant-message"><p>${escape(answer)}</p></div></div>
+  `<div data-turn-key="${key}">${text === undefined ? "" : `<div data-user-message-bubble><div data-search-result-target style="white-space:pre-wrap">${escapeHtml(text)}</div></div>`}
+    <div data-content-search-unit-key="${key}:assistant"><div data-conversation-role="assistant"></div><div data-markdown-text-style="assistant-message"><p>${escapeHtml(answer)}</p></div></div>
     ${complete ? '<div class="turn-action-controls"><button>Copy</button></div>' : ""}</div>`;
 
 test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("a new multipart user message is accepted before ChatGPT mounts its assistant area", async () => {

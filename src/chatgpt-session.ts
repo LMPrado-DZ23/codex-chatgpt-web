@@ -177,12 +177,12 @@ async function waitForEffortSurface(
   timeoutMs: number,
 ): Promise<Omit<ChatGptEffortActivation, "method"> | undefined> {
   const deadline = Date.now() + timeoutMs;
-  do {
+  for (;;) {
     const surface = await visibleEffortSurface(page, control);
     if (surface) return surface;
     if (Date.now() >= deadline) return undefined;
     await new Promise(resolveSleep => setTimeout(resolveSleep, 50));
-  } while (true);
+  }
 }
 
 async function clearGhostEffortState(page: Page, control: Locator): Promise<void> {
@@ -249,7 +249,7 @@ export async function readChatGptEffortSnapshot(
   timeoutMs = 1_000,
 ): Promise<ChatGptEffortSliderState & { available: boolean[] }> {
   const deadline = Date.now() + timeoutMs;
-  do {
+  for (;;) {
     // Read the range, selection and locks in one DOM revision. Separate Playwright
     // reads can straddle hydration and combine a five-step range with four ticks.
     const snapshot = await sliderContainer.evaluate(container => {
@@ -273,7 +273,7 @@ export async function readChatGptEffortSnapshot(
     }
     if (Date.now() >= deadline) break;
     await new Promise(resolve => setTimeout(resolve, 50));
-  } while (true);
+  }
   throw new Error("ChatGPT effort availability could not be verified from its slider ticks");
 }
 

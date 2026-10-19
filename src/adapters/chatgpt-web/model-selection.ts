@@ -91,7 +91,7 @@ export async function assertChatGptModelFamily(
   settleMs = 0,
 ): Promise<void> {
   const deadline = Date.now() + settleMs;
-  do {
+  for (;;) {
     const option = familyOption(menu, family);
     const checked = await option.count() === 1 && await option.getAttribute("aria-checked") === "true";
     const state = parseChatGptEffortSliderState(
@@ -102,6 +102,6 @@ export async function assertChatGptModelFamily(
     if (checked && state && state.value === state.min + effortIndex && chatGptModelFamilyMatches(descriptions, family, effort)) return;
     if (Date.now() >= deadline) break;
     await new Promise(resolve => setTimeout(resolve, 50));
-  } while (true);
+  }
   throw familyError(family);
 }

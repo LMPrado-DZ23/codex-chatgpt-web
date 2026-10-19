@@ -39,6 +39,7 @@ import {
 import {
   compiledChatGptWebMaxMessageChars,
   estimateChatGptWebImageTokens,
+  estimateCompiledChatGptWebInputTokens,
   estimateCompiledChatGptWebMessageTokens,
 } from "./input-tokens";
 import {
@@ -50,7 +51,6 @@ import {
   type ChatGptWebPromptImage,
   type ChatGptWebMultipartStage,
 } from "./prompt";
-import { estimateCompiledChatGptWebInputTokens } from "./input-tokens";
 import {
   assertAuthenticatedChatGptPage,
   assertNewChatPage,
@@ -2925,7 +2925,7 @@ export class ChatGptBrowserWorker {
     signal?: AbortSignal,
     externalProgress?: ChatGptTurnProgressReader,
     initialToolBatchRevision = externalProgress?.snapshot().lastToolBatchRevision ?? 0,
-    completionTracker?: ChatGptCompletionTracker,
+    _completionTracker?: ChatGptCompletionTracker,
   ): Promise<ChatGptSubmissionEvidence> {
     if (signal?.aborted) throw new DOMException("ChatGPT web turn aborted", "AbortError");
     for (;;) {
@@ -2983,7 +2983,7 @@ export class ChatGptBrowserWorker {
       const scope = globalThis as typeof globalThis & {
         __CODEX_WEB_GPT_TURN_OBSERVER__?: ObserverState;
       };
-      const observerState = scope.__CODEX_WEB_GPT_TURN_OBSERVER__ ??= (() => {
+      scope.__CODEX_WEB_GPT_TURN_OBSERVER__ ??= (() => {
         const state: ObserverState = {
           id: `${performance.timeOrigin}:${Math.random().toString(36).slice(2)}`,
           revision: 0,
@@ -3001,6 +3001,7 @@ export class ChatGptBrowserWorker {
         });
         return state;
       })();
+      const observerState = scope.__CODEX_WEB_GPT_TURN_OBSERVER__;
       const observerKey = `${observerState.id}:${observerState.revision}`;
       if (options.knownKey === observerKey) return { key: observerKey };
       const identities = (elements: Element[], attribute: string): string[] => {
@@ -3431,7 +3432,7 @@ export class ChatGptBrowserWorker {
         // markup stays as text, and arbitrary non-editable content is still checked.
         'svg, style, script, [data-id^="plugin:"][data-keyword], [data-inline-selection-pill-cursor-target], [app-mention-path^="app://"][app-mention-display-name][contenteditable="false"]',
       )
-        .forEach(part => part.remove());
+        .forEach((part) => { part.remove(); });
       return [...clone.childNodes]
         .map(child => child.textContent ?? "")
         .join("\n")
@@ -4317,13 +4318,14 @@ export class ChatGptBrowserWorker {
       const scope = globalThis as typeof globalThis & {
         __CODEX_WEB_GPT_RESPONSE_OBSERVERS__?: ObserverRegistry;
       };
-      const registry = scope.__CODEX_WEB_GPT_RESPONSE_OBSERVERS__ ??= {
+      scope.__CODEX_WEB_GPT_RESPONSE_OBSERVERS__ ??= {
         documentId: `${performance.timeOrigin}:${Math.random().toString(36).slice(2)}`,
         nextId: 0,
         nextNodeId: 0,
         nodeIds: new WeakMap(),
         states: new WeakMap<Element, ObserverState>(),
       };
+      const registry = scope.__CODEX_WEB_GPT_RESPONSE_OBSERVERS__;
       let observerState = registry.states.get(root);
       if (!observerState) {
         observerState = {
@@ -4714,7 +4716,7 @@ export class ChatGptBrowserWorker {
           const nodes = inlineRun;
           inlineRun = [];
           const shell = document.createElement("span");
-          nodes.forEach(node => shell.append(node.cloneNode(true)));
+          nodes.forEach((node) => { shell.append(node.cloneNode(true)); });
           const text = markdownText(shell);
           if (text || linkState(shell).mutableReference) {
             const rangedElements = nodes.flatMap(node => node instanceof Element
@@ -4770,9 +4772,9 @@ export class ChatGptBrowserWorker {
         : undefined;
       const completionActionSet = new Set(completionAction ? [completionAction] : []);
       const candidates = new Map<HTMLElement, ChatGptVisibleTraceBlock["kind"]>();
-      renderedRoots.forEach(candidate => candidates.set(candidate, "answer"));
-      commentaryRoots.forEach(candidate => candidates.set(candidate, "commentary"));
-      activitySummaryRoots.forEach(candidate => candidates.set(candidate, "status"));
+      renderedRoots.forEach((candidate) => { candidates.set(candidate, "answer"); });
+      commentaryRoots.forEach((candidate) => { candidates.set(candidate, "commentary"); });
+      activitySummaryRoots.forEach((candidate) => { candidates.set(candidate, "status"); });
       const overlapsRenderedAnswer = (candidate: HTMLElement): boolean => renderedRoots.some(rendered => (
         candidate.contains(rendered) || rendered.contains(candidate)
       ));

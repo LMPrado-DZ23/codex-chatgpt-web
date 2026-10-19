@@ -35,7 +35,7 @@ async function snapshots(html: string, changes: Array<(document: Document) => vo
     configurable: true, get() { return this.textContent; },
   });
   Object.defineProperty(window.HTMLElement.prototype, "append", {
-    configurable: true, value(this: HTMLElement, ...nodes: Node[]) { nodes.forEach(node => this.appendChild(node)); },
+    configurable: true, value(this: HTMLElement, ...nodes: Node[]) { nodes.forEach((node) => { this.appendChild(node); }); },
   });
   const collections = [window.document.querySelectorAll("div"), window.document.body.children].map(Object.getPrototypeOf);
   const iterators = collections.map(prototype => Object.getOwnPropertyDescriptor(prototype, Symbol.iterator));
@@ -228,6 +228,7 @@ test("file preview removal preserves a pending paragraph through movement and re
         const root = document.querySelector(".markdown")!;
         const file = document.querySelector("#file")!;
         root.parentElement!.appendChild(file);
+        // biome-ignore lint/correctness/noSelfAssign: remounts the exact markup so the fixture nodes are replaced
         if (remount) root.innerHTML = root.innerHTML;
       },
       () => {},
@@ -654,6 +655,7 @@ test("late source ranges preserve the same answer blocks across subsequent remou
     }
   }, doc => {
     const answer = doc.querySelector('[data-markdown-text-style="assistant-message"]')!;
+    // biome-ignore lint/correctness/noSelfAssign: remounts the exact markup so the fixture nodes are replaced
     answer.innerHTML = answer.innerHTML;
   }, doc => {
     doc.getElementById("first")!.remove();
@@ -678,6 +680,7 @@ test("late source ranges cannot disguise edits, reordered blocks or unknown node
     const [before, after] = await snapshots(html, [doc => {
       if (change === "remount") {
         const answer = doc.querySelector(".markdown")!;
+        // biome-ignore lint/correctness/noSelfAssign: remounts the exact markup so the fixture nodes are replaced
         answer.innerHTML = answer.innerHTML;
       }
       if (change === "text") doc.getElementById("first")!.textContent = "Changed.";

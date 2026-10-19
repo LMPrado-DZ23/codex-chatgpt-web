@@ -139,17 +139,17 @@ test("submission DOM tracks logical identities and retains virtualized history i
   expect([...baseline.initialTurnIdentities]).toEqual(turns.map(turn => turn.id));
   // A renderer update renumbers existing nodes and mounts old history, without a new submission.
   turns = turns.map(turn => ({ ...turn, index: turn.index + 2, mounted: true }));
-  observers.forEach(notify => notify());
+  observers.forEach((notify) => { notify(); });
   expect(await worker.currentSubmissionEvidence(page, baseline)).toBeUndefined();
   expect([...(await worker.submissionDomState(page, baseline.domCache)).responseIdentities])
     .toEqual(["old-answer", "current-answer"]);
   expect(baseline.domCache.fullScans).toBe(2);
   // Changing a logical ID invalidates the cached snapshot; its display index is not authority.
   turns[2] = { ...turns[2]!, id: "new-user" };
-  observers.forEach(notify => notify());
+  observers.forEach((notify) => { notify(); });
   expect(await worker.currentSubmissionEvidence(page, baseline)).toBe("user_turn");
   turns.push({ ...turns[3]!, index: 20 });
-  observers.forEach(notify => notify());
+  observers.forEach((notify) => { notify(); });
   await expect(worker.submissionDomState(page, baseline.domCache)).rejects.toThrow("duplicate");
 });
 
@@ -199,24 +199,24 @@ test("power turn identity separates roles and keeps virtualized groups in the su
     "legacy", "group:user:history", "group:assistant:history", "group:user:previous", "group:assistant:previous",
   ]);
   window.document.querySelector('[data-turn-key="history"]').innerHTML = '<div data-user-message-bubble></div><h4 data-conversation-role="assistant"></h4>';
-  observers.forEach(notify => notify());
+  observers.forEach((notify) => { notify(); });
   expect(await worker.currentSubmissionEvidence(page, baseline)).toBeUndefined();
   const next = window.document.createElement("div");
   next.setAttribute("data-turn-key", "next");
   next.innerHTML = '<div data-user-message-bubble></div>';
   window.document.body.appendChild(next);
-  observers.forEach(notify => notify());
+  observers.forEach((notify) => { notify(); });
   expect(await worker.currentSubmissionEvidence(page, baseline)).toBe("user_turn");
   expect(chatGptNewTurnIdentity(baseline.initialTurnIdentities, (await worker.submissionDomState(page)).responseIdentities)).toBeUndefined();
   next.innerHTML += '<h4 data-conversation-role="assistant"></h4>';
-  observers.forEach(notify => notify());
+  observers.forEach((notify) => { notify(); });
   expect(chatGptNewTurnIdentity(baseline.initialTurnIdentities, (await worker.submissionDomState(page)).responseIdentities)).toBe("group:assistant:next");
   window.document.body.appendChild(next.cloneNode(true));
-  observers.forEach(notify => notify());
+  observers.forEach((notify) => { notify(); });
   await expect(worker.submissionDomState(page)).rejects.toThrow("duplicate conversation turn identities");
   window.document.body.lastChild.remove();
   next.setAttribute("data-turn-key", "");
-  observers.forEach(notify => notify());
+  observers.forEach((notify) => { notify(); });
   await expect(worker.submissionDomState(page)).rejects.toThrow("no stable data-turn-key");
 });
 
@@ -4605,7 +4605,6 @@ test("Full mode has no fixed post-tool final-answer deadline", () => {
   }, 2_501)).toBeFalse();
 
   progress.recordToolResult(3_000);
-  const completed = progress.snapshot();
   // Hiding the tool row cannot release a stale partial answer after a newer batch.
   expect(tracker.update({
     ...partialLookingFinal,

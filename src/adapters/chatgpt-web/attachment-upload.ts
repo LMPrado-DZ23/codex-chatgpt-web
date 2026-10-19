@@ -42,12 +42,15 @@ export async function observeChatGptAttachmentUploads(page: Page, names: string[
     if (stream.pending.length > 1024 * 1024) return fail("unrecognized upload processing stream");
     for (const line of lines) {
       if (!line.trim()) continue;
-      let envelope;
-      try { envelope = JSON.parse(line); } catch { continue; }
-      const event = envelope.data && typeof envelope.data === "object" ? envelope.data : envelope;
+      let envelope: Record<string, unknown>;
+      try { envelope = JSON.parse(line) as Record<string, unknown>; } catch { continue; }
+      const payload = (envelope.data && typeof envelope.data === "object"
+        ? envelope.data
+        : envelope) as Record<string, unknown>;
+      const event = payload as { event?: unknown; file_id?: unknown };
       const name = event.event ?? envelope.event;
       if (typeof name !== "string") continue;
-      if (stream.fileId && event.file_id && event.file_id !== stream.fileId) continue;
+      if (stream.fileId && typeof event.file_id === "string" && event.file_id !== stream.fileId) continue;
       if (/\.(error|failed|cancelled|unknown)$/.test(name)) return fail(`processing event ${name}`);
       if (name === "file.processing.completed") {
         completed.add(stream.name);
@@ -64,11 +67,19 @@ export async function observeChatGptAttachmentUploads(page: Page, names: string[
     const creation = url.pathname === "/backend-api/files";
     if (url.origin !== origin || !(creation || url.pathname === "/backend-api/files/process_upload_stream"
       || /^\/backend-api\/files\/upload_reservations\/[^/]+\/claim_and_finish$/.test(url.pathname))) return;
-    let body;
-    try { body = JSON.parse(event.request.postData ?? ""); } catch { return; }
-    if (!expected.has(body?.file_name)) return;
+    type UploadRequestBody = { file_name?: unknown; file_id?: unknown };
+    let body: UploadRequestBody;
+    try { body = JSON.parse(event.request.postData ?? "") as UploadRequestBody; } catch { return; }
+    const fileName = body.file_name;
+    if (typeof fileName !== "string" || !expected.has(fileName)) return;
     if (creation) { creations.add(event.requestId); return; }
-    streams.set(event.requestId, { name: body.file_name, fileId: body.file_id, decoder: new StringDecoder("utf8"), pending: "", buffered: [] });
+    streams.set(event.requestId, {
+      name: fileName,
+      fileId: typeof body.file_id === "string" ? body.file_id : undefined,
+      decoder: new StringDecoder("utf8"),
+      pending: "",
+      buffered: [],
+    });
   };
   const onResponse = (event: any) => {
     if (creations.has(event.requestId)) {

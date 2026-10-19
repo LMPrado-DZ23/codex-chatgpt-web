@@ -43,6 +43,7 @@ test.skipIf(!process.env.CHATGPT_DOM_TEST_BROWSER)("paragraph identity survives 
       const moved = await observe();
       expect(moved.markdownSegments.at(-1).key).toBe(before.markdownSegments.at(-1).key);
       expect(buffer.observe(moved.markdownSegments, 1)).toBe("");
+      // biome-ignore lint/correctness/noSelfAssign: remounts the fixture answer so buffered segments must survive it
       await page.locator("#answer").evaluate(answer => { answer.innerHTML = answer.innerHTML; });
       buffer.observe((await observe()).markdownSegments, 2);
       expect(buffer.finish().markdown).toBe("Report saved:\n\nreport.md\n\nDone.");

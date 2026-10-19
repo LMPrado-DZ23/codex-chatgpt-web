@@ -20,7 +20,7 @@ for (const event of ["file.processing.completed", "file.processing.error", "file
     for (const [key, value] of Object.entries(process.env)) {
       if (value !== undefined && key !== "ELECTRON_RUN_AS_NODE") env[key] = value;
     }
-    let app;
+    let app: Awaited<ReturnType<typeof _electron.launch>> | undefined;
     try {
       app = await _electron.launch({ executablePath: executable, args: [main, `--user-data-dir=${join(scratch, "profile")}`], env });
       const page = await app.firstWindow();

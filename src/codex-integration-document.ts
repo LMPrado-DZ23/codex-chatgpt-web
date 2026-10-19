@@ -286,8 +286,7 @@ export function parseDocument(text: string): CodexConfigDocument {
   const endings: string[] = [];
   const lineBreak = /\r\n|\n|\r/g;
   let start = 0;
-  let match: RegExpExecArray | null;
-  while ((match = lineBreak.exec(text)) !== null) {
+  for (let match = lineBreak.exec(text); match !== null; match = lineBreak.exec(text)) {
     lines.push(text.slice(start, match.index));
     endings.push(match[0]);
     start = match.index + match[0].length;

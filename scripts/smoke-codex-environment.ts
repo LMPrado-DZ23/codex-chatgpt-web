@@ -86,6 +86,7 @@ async function* answer(text: string, ready?: Promise<void>): AsyncGenerator<Adap
   yield { type: "done", stopReason: "stop", endTurn: true };
 }
 
+// biome-ignore lint/correctness/useYield: the failing turn must throw before it can yield any event.
 async function* failure(error: Error): AsyncGenerator<AdapterEvent> { throw error; }
 
 const server = Bun.serve({
