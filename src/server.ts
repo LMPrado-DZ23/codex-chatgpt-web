@@ -1182,6 +1182,9 @@ export function startServer(
         setTimeout(shutdown, 0);
         return Response.json({ status: "ok", accepting_turns: false, ...current });
       }
+      if (req.method === "GET" && url.pathname === "/health") {
+        return Response.json({ ok: true, mode: config.mode });
+      }
       if (req.method === "GET" && url.pathname === "/v1/models") {
         if (draining) {
           return formatErrorResponse(
