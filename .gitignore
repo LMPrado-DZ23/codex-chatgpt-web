@@ -17,4 +17,5 @@ launcher/artifacts/
 .playwright-cli/
 output/
 notes.md
+.e2e-launcher/
 /.agents/skills/github-pairing/
