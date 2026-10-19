@@ -23,6 +23,7 @@ changes are offered upstream.
 | Fix | `src/adapters/chatgpt-web/browser-worker.ts` duplicate `./input-tokens` import merged | Dead duplication caught by review; also the clearest example of what a linter would have caught. |
 | Localization | **pt-BR language pack**: `languages.json` entry (`Português (Brasil)`, marker `PT`, locale `pt-BR`), 232 UI strings in `launcher/src/i18n.ts`, 59 Limits strings in `launcher/src/limits-copy.ts`, 14 native tray/dialog strings in `launcher/electron/main.cjs` | The launcher shipped en, zh-CN, zh-TW, ja and ko only. `Language` is derived from `languages.json`, so the new locale participates in onboarding, Settings, tray and native dialogs. |
 | Browser E2E | `scripts/e2e-launcher.ts` + `bun run e2e:launcher --port <cdpPort>` | Nothing exercised the real Electron renderer in a browser. The script attaches over CDP with Playwright and verifies every page, every locale (including pt-BR), the doctor IPC round-trip, reload persistence, the embedded ChatGPT surface, and renderer console/page errors. |
+| DeepSeek Web | `deepseek-web/chat` and `deepseek-web/think` rows in the Codex picker, served by `src/adapters/deepseek-web/` | Multi-provider B1: the Responses server routes DeepSeek slugs to the local [deepseek-web-bridge](https://github.com/LMPrado-DZ23/deepseek-web-bridge) instead of the ChatGPT browser worker. |
 
 ## Intentional lint exceptions
 
@@ -84,6 +85,83 @@ Two environment notes:
 - The embedded ChatGPT page logs its own CSP/third-party errors; the E2E only asserts on the
   launcher renderer, which is the surface this fork owns.
 
+## DeepSeek Web adapter (B1, experimental)
+
+The bridge now hosts more than ChatGPT Web. Once a bridge URL is configured (persisted in the core
+`config.json`, with `DEEPSEEK_WEB_BRIDGE_URL` still honored as an override), `/v1/models` also lists
+two DeepSeek rows and `/v1/responses` routes those slugs to the local browser bridge:
+
+```text
+Codex -> /v1/responses (this bridge) -> src/adapters/deepseek-web -> deepseek-web-bridge -> chat.deepseek.com
+```
+
+The same B1 seam is also published as the standalone hub
+[`LMPrado-DZ23/multi-ai-web`](https://github.com/LMPrado-DZ23/multi-ai-web): one loopback catalogue
+that proxies this daemon (`:17841`, Responses) and the DeepSeek bridge (`:8787`, Chat Completions)
+with bidirectional wire translation. This fork remains focused on Codex + ChatGPT; the hub is where
+additional web providers are admitted.
+
+- Rows: `deepseek-web/chat` and `deepseek-web/think` (131,072-token context, compaction at 118,000).
+- Text only: image content fails explicitly instead of being dropped.
+- Tools are relayed through the bridge's text protocol; there is no OpenAI tunnel/MCP connector for
+  this route, so Full-harness approvals do not apply to it.
+- Setup: clone [deepseek-web-bridge](https://github.com/LMPrado-DZ23/deepseek-web-bridge),
+  run `node src/index.mjs login` once, then `node src/index.mjs serve`, and point this installation
+  at it:
+
+  ```bash
+  codex-chatgpt-web deepseek-web set --bridge-url http://127.0.0.1:8787
+  codex-chatgpt-web deepseek-web status [--json]
+  codex-chatgpt-web deepseek-web clear
+  ```
+
+  Restart the launcher/daemon after changing it. The setting lives in the core configuration the
+  launcher-owned daemon already reads, so no shell environment variable is required.
+- Measured on 2026-10-19: 26 tests (adapter stream/tools/errors, catalog rows, `/v1/models`
+  exposure, config validation/persistence, CLI set/status/clear, route incl. fail-closed bridge-down)
+  and live turns through the real bridge — `OK-DEEPSEEK` (chat, non-stream), `STREAM-OK` (chat,
+  streamed with usage), `THINK-OK` (think model) and a tool-call turn that produced the expected
+  `function_call` (`get_time`) from the bridge's text protocol.
+- Limits: no native function calling, no images/attachments, bridge latency of seconds per turn, the
+  DeepSeek session expires periodically, and the site DOM can change (run the bridge's `diagnose`).
+  Automating the DeepSeek web chat can conflict with DeepSeek's ToS and risks account restrictions.
+- Known bridge limitation (v0.1.2): when the model emits a tool call, the rendered tool block can be
+  streamed as assistant text because the bridge's stream suppression misses that rendering; the
+  `function_call` itself is still parsed correctly. The fix belongs in `deepseek-web-bridge`, not in
+  this adapter.
+
+### Custom web providers (Claude Web, Gemini Web, …)
+
+DeepSeek is a built-in provider. Any additional local bridge can be registered without new core
+code; model slugs become `<provider-id>/<model-id>`:
+
+```bash
+codex-chatgpt-web web-provider add --id claude-web --label "Claude Web" \
+  --bridge-url http://127.0.0.1:8788 --model sonnet --model opus
+codex-chatgpt-web web-provider list [--json]
+codex-chatgpt-web web-provider remove claude-web
+```
+
+The command writes the same validated entry to the core configuration (advanced fields can still be
+edited by hand):
+
+```json
+{
+  "webProviders": [{
+    "id": "claude-web",
+    "label": "Claude Web",
+    "bridgeUrl": "http://127.0.0.1:8788",
+    "models": [{ "id": "sonnet", "displayName": "Claude Sonnet", "contextWindow": 200000 }]
+  }]
+}
+```
+
+The generic adapter speaks the same chat-completions contract as `deepseek-web-bridge`, so a future
+Claude or Gemini bridge only needs to expose `/v1/models` and `/v1/chat/completions`. Configuration
+is validated (reserved ids `chatgpt-web`/`deepseek-web`, unique ids/models, http(s) URLs, context and
+compaction limits) and covered by tests. The hybrid UI plan (provider tabs, per-provider partitions,
+model→tab binding) is documented in [`docs/web-provider-tabs.md`](docs/web-provider-tabs.md).
+
 ## Upstream invariants worth knowing
 
 - `launcher/tests/localization.test.cjs` requires every locale README (`README.zh-CN.md`,
@@ -97,6 +175,9 @@ Two environment notes:
 
 ## Next steps (not done here)
 
+0. Multi-provider follow-ups (design C, see `docs/web-provider-tabs.md`): launcher provider tabs with
+   per-provider partitions (phase 2), then Claude Web and Gemini Web adapters (phases 3–4). DeepSeek
+   stays on its external bridge meanwhile.
 1. `noUncheckedIndexedAccess` — currently 22 type errors; adopt with a focused PR that adds explicit
    bounds handling instead of non-null assertions.
 2. Coverage ratchet — record the current per-file numbers and fail the build when a touched file

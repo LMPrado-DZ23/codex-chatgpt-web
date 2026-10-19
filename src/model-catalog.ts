@@ -7,6 +7,10 @@ import {
   resolveChatGptWebContextLimits,
   type ChatGptWebModelRoute,
 } from "./chatgpt-web-models";
+import {
+  buildBridgedWebModel,
+  configuredWebProviders,
+} from "./web-providers";
 
 type JsonObject = Record<string, unknown>;
 
@@ -171,8 +175,14 @@ export function augmentNativeModelCatalog(
   if (!Array.isArray(catalog.models)) {
     throw new Error("Native Codex models response is missing a models array");
   }
+  const bridgedProviders = configuredWebProviders(config);
+  const bridgedPrefixes = bridgedProviders.map(provider => provider.modelPrefix);
   const nativeModels = structuredClone(
-    catalog.models.filter(model => !slug(model)?.startsWith(CHATGPT_WEB_MODEL_PREFIX)),
+    catalog.models.filter(model => {
+      const modelSlug = slug(model);
+      return !modelSlug?.startsWith(CHATGPT_WEB_MODEL_PREFIX)
+        && !bridgedPrefixes.some(prefix => modelSlug?.startsWith(prefix));
+    }),
   );
   if (config.subagentProtocol === "compatibility-v1") {
     for (const candidate of nativeModels) {
@@ -202,8 +212,11 @@ export function augmentNativeModelCatalog(
   }
   const webModels = availableChatGptWebModelRoutes(config, true)
     .map(route => buildChatGptWebModel(template, route, config));
+  // Bridged providers only appear when their local bridge was explicitly configured.
+  const bridgedModels = bridgedProviders.flatMap(provider => provider.models
+    .map(model => buildBridgedWebModel(template, provider, model, config)));
   return {
     ...structuredClone(catalog),
-    models: [...nativeModels, ...webModels],
+    models: [...nativeModels, ...webModels, ...bridgedModels],
   };
 }

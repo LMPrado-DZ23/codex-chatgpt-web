@@ -95,6 +95,26 @@ export interface TunnelConfig {
   alias: string;
 }
 
+export interface WebProviderModelConfig {
+  /** Model id the local bridge exposes (e.g. "claude-sonnet"). */
+  id: string;
+  displayName?: string;
+  description?: string;
+  contextWindow?: number;
+  autoCompactTokenLimit?: number;
+  thinking?: boolean;
+}
+
+/** A local HTTP bridge that drives another web AI through a real browser session. */
+export interface WebProviderConfig {
+  /** Provider id and model slug prefix (models become "<id>/<model-id>"). */
+  id: string;
+  label?: string;
+  /** Local bridge origin, e.g. http://127.0.0.1:8788. */
+  bridgeUrl: string;
+  models: WebProviderModelConfig[];
+}
+
 export interface AppConfig {
   version: 3;
   purpose?: "dev-harness";
@@ -126,6 +146,10 @@ export interface AppConfig {
   zeroRiskProEnabled: boolean;
   /** Optional adapter-silence budget for the Responses watchdog. */
   stallTimeoutSec?: number;
+  /** Local deepseek-web-bridge origin used by the DeepSeek Web rows. Unset disables them. */
+  deepseekWebBridgeUrl?: string;
+  /** Additional web-AI bridges registered next to DeepSeek Web (Claude Web, Gemini Web, ...). */
+  webProviders?: WebProviderConfig[];
   autoApproveToolCalls: boolean;
   controlToken: string;
   runtimeCommand: string[];
@@ -408,6 +432,113 @@ export function loadConfigForSetup(): AppConfig {
   return parseConfig(raw, path);
 }
 
+function parseHttpBridgeUrl(value: unknown, field: string, path: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Invalid ${field} in ${path}`);
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    throw new Error(`Invalid ${field} in ${path}`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`${field} must be an http(s) URL in ${path}`);
+  }
+  return `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`;
+}
+
+function parseDeepseekWebBridgeUrl(value: unknown, path: string): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  return parseHttpBridgeUrl(value, "deepseekWebBridgeUrl", path);
+}
+
+const RESERVED_WEB_PROVIDER_IDS = new Set(["chatgpt-web", "deepseek-web"]);
+
+function parseWebProviderEntry(entry: unknown, indexLabel: string, path: string): WebProviderConfig {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    throw new Error(`Invalid ${indexLabel} in ${path}`);
+  }
+  const item = entry as Partial<WebProviderConfig>;
+  if (typeof item.id !== "string" || !/^[a-z][a-z0-9-]{1,30}$/.test(item.id)) {
+    throw new Error(`Invalid ${indexLabel}.id in ${path}`);
+  }
+  if (RESERVED_WEB_PROVIDER_IDS.has(item.id)) {
+    throw new Error(`${indexLabel} id ${item.id} is reserved in ${path}`);
+  }
+  let label: string | undefined;
+  if (item.label !== undefined) {
+    if (typeof item.label !== "string" || !item.label.trim() || item.label.length > 80) {
+      throw new Error(`Invalid ${indexLabel}.label in ${path}`);
+    }
+    label = item.label.trim();
+  }
+  const bridgeUrl = parseHttpBridgeUrl(item.bridgeUrl, `${indexLabel}.bridgeUrl`, path);
+  if (!Array.isArray(item.models) || item.models.length === 0) {
+    throw new Error(`${indexLabel}.models must be a non-empty array in ${path}`);
+  }
+  const seenModels = new Set<string>();
+  const models = item.models.map((modelEntry, modelIndex) => {
+    const modelLabel = `${indexLabel}.models[${modelIndex}]`;
+    if (!modelEntry || typeof modelEntry !== "object" || Array.isArray(modelEntry)) {
+      throw new Error(`Invalid ${modelLabel} in ${path}`);
+    }
+    const model = modelEntry as Partial<WebProviderModelConfig>;
+    if (typeof model.id !== "string" || !/^[a-z0-9][a-z0-9._-]{0,60}$/.test(model.id)) {
+      throw new Error(`Invalid ${modelLabel}.id in ${path}`);
+    }
+    if (seenModels.has(model.id)) throw new Error(`Duplicate ${modelLabel}.id in ${path}`);
+    seenModels.add(model.id);
+    const contextWindow = model.contextWindow ?? 131_072;
+    if (!Number.isSafeInteger(contextWindow) || contextWindow <= 0) {
+      throw new Error(`Invalid ${modelLabel}.contextWindow in ${path}`);
+    }
+    const autoCompactTokenLimit = model.autoCompactTokenLimit ?? Math.floor(contextWindow * 0.9);
+    if (!Number.isSafeInteger(autoCompactTokenLimit) || autoCompactTokenLimit <= 0
+      || autoCompactTokenLimit >= contextWindow) {
+      throw new Error(`Invalid ${modelLabel}.autoCompactTokenLimit in ${path}`);
+    }
+    if (model.thinking !== undefined && typeof model.thinking !== "boolean") {
+      throw new Error(`Invalid ${modelLabel}.thinking in ${path}`);
+    }
+    if (model.displayName !== undefined
+      && (typeof model.displayName !== "string" || !model.displayName.trim() || model.displayName.length > 80)) {
+      throw new Error(`Invalid ${modelLabel}.displayName in ${path}`);
+    }
+    if (model.description !== undefined && typeof model.description !== "string") {
+      throw new Error(`Invalid ${modelLabel}.description in ${path}`);
+    }
+    return {
+      id: model.id,
+      ...(model.displayName === undefined ? {} : { displayName: model.displayName.trim() }),
+      ...(model.description === undefined ? {} : { description: model.description }),
+      contextWindow,
+      autoCompactTokenLimit,
+      thinking: model.thinking === true,
+    };
+  });
+  return { id: item.id, ...(label === undefined ? {} : { label }), bridgeUrl, models };
+}
+
+function parseWebProviders(value: unknown, path: string): WebProviderConfig[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value)) throw new Error(`Invalid webProviders in ${path}`);
+  const seenProviders = new Set<string>();
+  return value.map((entry, index) => {
+    const provider = parseWebProviderEntry(entry, `webProviders[${index}]`, path);
+    if (seenProviders.has(provider.id)) {
+      throw new Error(`Duplicate webProviders id ${provider.id} in ${path}`);
+    }
+    seenProviders.add(provider.id);
+    return provider;
+  });
+}
+
+/** Validate one provider entry for CLI writes (same rules as the persisted configuration). */
+export function validateWebProviderConfig(entry: unknown): WebProviderConfig {
+  return parseWebProviderEntry(entry, "webProvider", "config");
+}
+
 function parseConfig(value: unknown, path: string): AppConfig {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`Invalid configuration object in ${path}`);
   const parsed = value as Partial<AppConfig>;
@@ -577,8 +708,12 @@ function parseConfig(value: unknown, path: string): AppConfig {
   if (proAvailable && !solAvailable) {
     throw new Error(`Invalid ChatGPT account capabilities in ${path}: Pro requires Sol`);
   }
+  const deepseekWebBridgeUrl = parseDeepseekWebBridgeUrl(parsed.deepseekWebBridgeUrl, path);
+  const webProviders = parseWebProviders(parsed.webProviders, path);
   return {
     ...parsed,
+    ...(deepseekWebBridgeUrl === undefined ? {} : { deepseekWebBridgeUrl }),
+    ...(webProviders === undefined ? {} : { webProviders }),
     appName: expectedAppName,
     automaticAppName,
     manualAppName,

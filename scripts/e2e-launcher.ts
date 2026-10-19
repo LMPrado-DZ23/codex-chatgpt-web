@@ -121,8 +121,16 @@ async function visit(name: string, expected: string[]) {
 await ensureEnglish();
 
 // 1. Every launcher page renders its own content.
-// The Browser page shows either the sign-in card or the embedded-surface toolbar.
-await visit("Browser", ["Sign in to ChatGPT", "chatgpt.com", "Open ChatGPT"]);
+// The Browser page shows the sign-in card, the embedded-surface toolbar, or an
+// in-progress identity-provider sign-in surface.
+await visit("Browser", [
+  "Sign in to ChatGPT",
+  "chatgpt.com",
+  "Open ChatGPT",
+  "Hide ChatGPT",
+  "Show ChatGPT",
+  "100%",
+]);
 await visit("Setup", ["Set up the isolated DEV profile"]);
 await visit("MCP", ["Simulated tools over MCP"]);
 await visit("Activity", ["Runtime activity"]);

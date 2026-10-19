@@ -26,6 +26,10 @@ import { readJsonRequestBody } from "./http-body";
 import { httpStatusFromTerminalError } from "./lib/errors";
 import { createHash } from "node:crypto";
 import { augmentNativeModelCatalog } from "./model-catalog";
+import { configuredDeepSeekWebBridgeUrl } from "./deepseek-web-models";
+import { webBridgeResponseRequest } from "./web-bridge-route";
+import { configuredWebProviders, webProviderForModelId } from "./web-providers";
+import { toolBridgeMaps } from "./tool-bridge-maps";
 import {
   readCodexModelContextOverride,
   readCodexSubagentProtocol,
@@ -47,7 +51,7 @@ import {
 } from "./responses/compaction";
 import { parseRequest } from "./responses/parser";
 import { expandPreviousResponseInput, flushResponseState, rememberResponseState } from "./responses/state";
-import { namespacedToolName, type AdapterEvent, type CodexParsedRequest } from "./types";
+import type { AdapterEvent, CodexParsedRequest } from "./types";
 import type { CodexProviderConfig } from "./types";
 import type { ProviderAdapter } from "./adapters/base";
 import { VERSION } from "./version";
@@ -597,21 +601,6 @@ async function nativeImagesRequest(
   }
 }
 
-function toolBridgeMaps(parsed: CodexParsedRequest): {
-  toolNsMap: Map<string, { namespace: string; name: string }>;
-  freeformToolNames: Set<string>;
-  toolSearchToolNames: Set<string>;
-} {
-  const toolNsMap = new Map<string, { namespace: string; name: string }>();
-  const freeformToolNames = new Set<string>();
-  const toolSearchToolNames = new Set<string>();
-  for (const tool of parsed.context.tools ?? []) {
-    if (tool.namespace) toolNsMap.set(namespacedToolName(tool.namespace, tool.name), { namespace: tool.namespace, name: tool.name });
-    if (tool.freeform) freeformToolNames.add(tool.name);
-    if (tool.toolSearch) toolSearchToolNames.add(tool.name);
-  }
-  return { toolNsMap, freeformToolNames, toolSearchToolNames };
-}
 
 export async function responseRequest(
   req: Request,
@@ -640,6 +629,27 @@ export async function responseRequest(
     }
   } catch (error) {
     return formatErrorResponse(400, "invalid_request_error", error instanceof Error ? error.message : String(error));
+  }
+  if (typeof requestedModel === "string") {
+    const bridged = webProviderForModelId(config, requestedModel);
+    if (bridged) {
+      let parsed: CodexParsedRequest;
+      try {
+        parsed = parseRequest(expandPreviousResponseInput(raw));
+      } catch (error) {
+        return formatErrorResponse(400, "invalid_request_error", error instanceof Error ? error.message : String(error));
+      }
+      return webBridgeResponseRequest(parsed, config, bridged.provider, bridged.model, options);
+    }
+    const looksBridged = requestedModel.startsWith("deepseek-web/")
+      || configuredWebProviders(config).some(provider => requestedModel.startsWith(provider.modelPrefix));
+    if (looksBridged) {
+      const message = requestedModel.startsWith("deepseek-web/") && configuredDeepSeekWebBridgeUrl(config) === undefined
+        ? "DeepSeek Web is not configured. Start the local bridge and run "
+          + "codex-chatgpt-web deepseek-web set --bridge-url http://127.0.0.1:8787."
+        : `Unknown bridged model: ${requestedModel}`;
+      return formatErrorResponse(400, "invalid_request_error", message);
+    }
   }
   if (typeof requestedModel === "string" && !isChatGptWebModelSlug(requestedModel)) {
     try {

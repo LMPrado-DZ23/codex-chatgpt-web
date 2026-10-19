@@ -6,7 +6,11 @@ import { existsSync, rmSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { stdin, stdout } from "node:process";
 import { captureSystemBrowserLoginToFile, checkBrowserEngine, loginToChatGpt } from "./browser-login";
-import { defaultConfig, getConfigDir, getConfigPath, loadConfig, loadConfigForSetup } from "./config";
+import { defaultConfig, getConfigDir, getConfigPath, loadConfig, loadConfigForSetup, saveConfig, validateWebProviderConfig } from "./config";
+import {
+  DEEPSEEK_WEB_DEFAULT_BRIDGE_URL,
+  normalizeDeepSeekWebBridgeUrl,
+} from "./deepseek-web-models";
 import {
   inspectLauncherBrowserHost,
   inspectLauncherBrowserHostLiveness,
@@ -41,6 +45,8 @@ Usage:
   codex-chatgpt-web login
   codex-chatgpt-web doctor [--json]
   codex-chatgpt-web route <status|connect|disconnect>
+  codex-chatgpt-web deepseek-web <status [--json]|set --bridge-url URL|clear>
+  codex-chatgpt-web web-provider <list [--json]|add --id ID --bridge-url URL --model ID [--model ID ...]|remove ID>
   codex-chatgpt-web subagents <status|compatibility-v1|native>
   codex-chatgpt-web browser check
   codex-chatgpt-web dev launcher
@@ -109,6 +115,19 @@ function takeFlag(args: string[], name: string): boolean {
   if (index < 0) return false;
   args.splice(index, 1);
   return true;
+}
+
+function takeAllOptions(args: string[], name: string): string[] {
+  const values: string[] = [];
+  for (;;) {
+    const index = args.indexOf(name);
+    if (index < 0) break;
+    const value = args[index + 1];
+    if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
+    values.push(value);
+    args.splice(index, 2);
+  }
+  return values;
 }
 
 async function confirm(question: string): Promise<boolean> {
@@ -574,6 +593,111 @@ async function uninstallCommand(args: string[]): Promise<void> {
   stdout.write(keepData ? "Uninstalled; private application data was preserved.\n" : "Uninstalled and removed private application data.\n");
 }
 
+async function deepseekWebCommand(args: string[]): Promise<void> {
+  const action = args.shift() ?? "status";
+  if (action === "status") {
+    const json = takeFlag(args, "--json");
+    assertNoArgs(args);
+    const config = existsSync(getConfigPath()) ? loadConfig() : undefined;
+    const bridgeUrl = config?.deepseekWebBridgeUrl ?? null;
+    if (json) {
+      stdout.write(`${JSON.stringify({ configured: bridgeUrl !== null, bridgeUrl }, null, 2)}\n`);
+      return;
+    }
+    stdout.write(bridgeUrl
+      ? `DeepSeek Web bridge: ${bridgeUrl}\n`
+      : `DeepSeek Web bridge is not configured. Run: codex-chatgpt-web deepseek-web set --bridge-url ${DEEPSEEK_WEB_DEFAULT_BRIDGE_URL}\n`);
+    return;
+  }
+  const config = loadConfig();
+  if (action === "set") {
+    const option = takeOption(args, "--bridge-url");
+    const positional = args.shift();
+    assertNoArgs(args);
+    const raw = option ?? positional;
+    if (!raw) throw new Error(`deepseek-web set requires --bridge-url URL (default ${DEEPSEEK_WEB_DEFAULT_BRIDGE_URL})`);
+    config.deepseekWebBridgeUrl = normalizeDeepSeekWebBridgeUrl(raw);
+    saveConfig(config);
+    stdout.write(`DeepSeek Web bridge saved: ${config.deepseekWebBridgeUrl}\nRestart the launcher or daemon to apply it.\n`);
+    return;
+  }
+  if (action === "clear") {
+    assertNoArgs(args);
+    if (config.deepseekWebBridgeUrl === undefined) {
+      stdout.write("DeepSeek Web bridge was not configured.\n");
+      return;
+    }
+    delete config.deepseekWebBridgeUrl;
+    saveConfig(config);
+    stdout.write("DeepSeek Web bridge removed. Restart the launcher or daemon to apply it.\n");
+    return;
+  }
+  throw new Error(`Unknown deepseek-web action: ${action}`);
+}
+
+async function webProviderCommand(args: string[]): Promise<void> {
+  const action = args.shift() ?? "list";
+  if (action === "list") {
+    const json = takeFlag(args, "--json");
+    assertNoArgs(args);
+    const config = existsSync(getConfigPath()) ? loadConfig() : undefined;
+    const providers = config?.webProviders ?? [];
+    if (json) {
+      stdout.write(`${JSON.stringify(providers, null, 2)}\n`);
+      return;
+    }
+    if (providers.length === 0) {
+      stdout.write("No custom web providers configured. DeepSeek Web is managed by the deepseek-web command.\n");
+      return;
+    }
+    for (const provider of providers) {
+      stdout.write(`${provider.id}${provider.label ? ` (${provider.label})` : ""} -> ${provider.bridgeUrl}`
+        + ` [${provider.models.map(model => model.id).join(", ")}]\n`);
+    }
+    return;
+  }
+  const config = loadConfig();
+  const providers = config.webProviders ? [...config.webProviders] : [];
+  if (action === "add" || action === "set") {
+    const id = takeOption(args, "--id");
+    const label = takeOption(args, "--label");
+    const bridgeUrl = takeOption(args, "--bridge-url");
+    const modelIds = takeAllOptions(args, "--model");
+    assertNoArgs(args);
+    if (!id) throw new Error("web-provider add requires --id ID");
+    if (!bridgeUrl) throw new Error("web-provider add requires --bridge-url URL");
+    if (modelIds.length === 0) throw new Error("web-provider add requires at least one --model ID");
+    const entry = validateWebProviderConfig({
+      id,
+      ...(label === undefined ? {} : { label }),
+      bridgeUrl,
+      models: modelIds.map(modelId => ({ id: modelId })),
+    });
+    const existing = providers.findIndex(provider => provider.id === entry.id);
+    if (existing >= 0) providers[existing] = entry;
+    else providers.push(entry);
+    config.webProviders = providers;
+    saveConfig(config);
+    stdout.write(`Web provider saved: ${entry.id} -> ${entry.bridgeUrl}`
+      + ` [${entry.models.map(model => model.id).join(", ")}]\nRestart the launcher or daemon to apply it.\n`);
+    return;
+  }
+  if (action === "remove") {
+    const id = args.shift();
+    assertNoArgs(args);
+    if (!id) throw new Error("web-provider remove requires a provider id");
+    const index = providers.findIndex(provider => provider.id === id);
+    if (index < 0) throw new Error(`Unknown web provider: ${id}`);
+    providers.splice(index, 1);
+    if (providers.length === 0) delete config.webProviders;
+    else config.webProviders = providers;
+    saveConfig(config);
+    stdout.write(`Web provider removed: ${id}\nRestart the launcher or daemon to apply it.\n`);
+    return;
+  }
+  throw new Error(`Unknown web-provider action: ${action}`);
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const home = takeOption(args, "--home");
@@ -595,6 +719,8 @@ async function main(): Promise<void> {
   else if (command === "login") await loginCommand(args);
   else if (command === "doctor" || command === "status") await doctorCommand(args);
   else if (command === "route") await routeCommand(args);
+  else if (command === "deepseek-web") await deepseekWebCommand(args);
+  else if (command === "web-provider") await webProviderCommand(args);
   else if (command === "subagents") await subagentsCommand(args);
   else if (command === "browser") {
     const action = args.shift();
