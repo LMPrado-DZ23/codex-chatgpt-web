@@ -16,6 +16,10 @@
   <a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.ko.md">한국어</a>
 </p>
 
+> **포크 안내**
+>
+> 이 저장소는 [miuuyy/codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web)의 추적 포크입니다. 공식 프로젝트는 업스트림이며, 공식 다운로드, 릴리스, 제품 이슈 추적은 업스트림에서 진행합니다. 이 포크는 업스트림 `main`을 따라가며 엔지니어링 강화(lint 게이트, CodeQL, 의존성 검토, SHA로 고정한 workflow actions)만 추가합니다. 변경 사항과 검증 방법은 [FORK-NOTES.md](FORK-NOTES.md)를 참고하세요. 제품 버그는 업스트림에, 이 포크의 도구 관련 문제는 여기에 보고해 주세요.
+
 <p align="center">
   <img src="assets/demo.gif" width="960" alt="네이티브 Codex 하네스를 사용하는 ChatGPT Web 실시간 턴">
 </p>

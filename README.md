@@ -16,6 +16,15 @@
   <a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.ko.md">한국어</a>
 </p>
 
+> **Fork notice**
+>
+> This repository is a tracking fork of
+> [miuuyy/codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web). The upstream project is
+> canonical: official downloads, releases and product issue tracking stay there. This fork follows
+> upstream `main` and adds engineering hardening only — a lint gate, CodeQL, dependency review and
+> SHA-pinned workflow actions. See [FORK-NOTES.md](FORK-NOTES.md) for the exact delta and how to
+> verify it. Report product bugs upstream; report fork-specific tooling problems here.
+
 <p align="center">
   <img src="assets/demo.gif" width="960" alt="A live ChatGPT Web turn using the native Codex harness">
 </p>

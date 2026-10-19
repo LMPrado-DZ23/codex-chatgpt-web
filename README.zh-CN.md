@@ -16,6 +16,10 @@
   <a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.ko.md">한국어</a>
 </p>
 
+> **Fork 说明**
+>
+> 本仓库是 [miuuyy/codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web) 的跟踪 fork。上游项目为权威版本：官方下载、发布和产品问题跟踪均在上游进行。本 fork 跟随上游 `main`，仅增加工程加固（lint 门禁、CodeQL、依赖审查以及按 SHA 固定版本的 workflow actions）。具体差异与验证方式见 [FORK-NOTES.md](FORK-NOTES.md)。产品缺陷请在上游报告；与本 fork 工具链相关的问题请在此报告。
+
 <p align="center">
   <img src="assets/demo.gif" width="960" alt="ChatGPT Web 实时轮次正在使用原生 Codex harness">
 </p>

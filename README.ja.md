@@ -16,6 +16,10 @@
   <a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.ko.md">한국어</a>
 </p>
 
+> **Fork について**
+>
+> このリポジトリは [miuuyy/codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web) の追跡フォークです。正式なプロジェクトは上流であり、公式ダウンロード、リリース、製品の issue 追跡は上流で行います。このフォークは上流の `main` に追従し、エンジニアリング面の強化（lint ゲート、CodeQL、依存関係レビュー、SHA で固定した workflow actions）のみを追加します。差分と検証方法は [FORK-NOTES.md](FORK-NOTES.md) を参照してください。製品の不具合は上流へ、このフォークのツールに関する問題はこちらへ報告してください。
+
 <p align="center">
   <img src="assets/demo.gif" width="960" alt="ネイティブ Codex ハーネスを使用する ChatGPT Web ターン">
 </p>
